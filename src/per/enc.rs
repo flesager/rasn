@@ -514,14 +514,20 @@ impl<const RCL: usize, const ECL: usize> Encoder<RCL, ECL> {
         let constraints = constraints.constraint;
 
         match constraints.start_and_end() {
-            (Some(_), Some(_)) => {
+            (Some(_), Some(&ub)) => {
                 let range = constraints.range().unwrap();
 
                 if range == 0 {
                     Ok(())
                 } else if range == 1 {
                     (encode_fn)(buffer, 0..length)
-                } else if range <= SIXTY_FOUR_K as usize {
+                } else if ub < SIXTY_FOUR_K as usize {
+                    // X.691 §11.9.3.3: a constrained length needs "ub" less than 64K;
+                    // §11.5.7.2-3: from a range of 256 it is one or two octets,
+                    // octet-aligned in the ALIGNED variant.
+                    if self.options.aligned && range >= 256 {
+                        self.pad_to_alignment(buffer);
+                    }
                     let effective_length = constraints.effective_value(length).into_inner();
                     let range = if self.options.aligned && range > 256 {
                         {
